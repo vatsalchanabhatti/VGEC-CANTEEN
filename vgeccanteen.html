@@ -146,6 +146,11 @@ ul,ol{list-style:none}
 .empty{border:1.5px dashed var(--line);border-radius:14px;padding:24px 18px;text-align:center;display:grid;gap:10px;justify-items:center}
 .empty h2{font:800 20px/1.2 var(--font-head)}
 .empty p{color:var(--muted);max-width:34ch}
+.auth{max-width:420px;margin:48px auto 0;background:var(--surface);border:1.5px solid var(--ink);border-radius:14px;padding:20px}
+.auth h2{font:800 22px/1.2 var(--font-head);margin-bottom:6px}
+.auth p{color:var(--muted);margin-bottom:18px}
+.auth input{width:100%;min-height:46px;border:1.5px solid var(--line);background:var(--bg);border-radius:12px;padding:10px 12px;margin-bottom:12px}
+.auth .error{color:var(--chilli);font-weight:600;margin:10px 0 0}
 .srow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
 .srow strong{display:block;font-weight:600}
 .sctl{display:flex;align-items:center;gap:14px}
@@ -203,6 +208,7 @@ textarea{width:100%;min-height:96px;resize:vertical;border:1.5px solid var(--lin
 'use strict';
 
 var CATS=['All','Snacks','Meals','Drinks'];
+var KITCHEN_PASSWORD='vgec1234';
 var ITEMS=[
   {id:1,name:'Samosa',cat:'Snacks',price:15,stock:30,emoji:'🥟'},
   {id:2,name:'Vada pav',cat:'Snacks',price:20,stock:24,emoji:'🍔'},
@@ -241,7 +247,7 @@ function timeStr(d){return d.toLocaleTimeString([], {hour:'numeric',minute:'2-di
 
 function initState(){
   var s={
-    role:'student',tab:'menu',cat:'All',
+    role:'student',tab:'menu',cat:'All',kitchenUnlocked:false,kitchenPasswordInput:'',kitchenError:'',
     items:ITEMS.map(function(x){return Object.assign({on:true},x);}),
     cart:{},orders:[],nextToken:100,feedback:[],
     sheet:null,pay:'upi',paying:false,rating:0,fbtext:'',
@@ -385,6 +391,15 @@ function feedbackView(){
     }).join('');
 }
 
+function kitchenLoginView(){
+  return '<section class="auth" aria-labelledby="kitchen-login-title"><h2 id="kitchen-login-title">Kitchen access</h2>'+ 
+    '<p>Enter the kitchen password to manage orders, stock, and feedback.</p>'+
+    '<label for="kitchen-password">Password</label>'+ 
+    '<input id="kitchen-password" type="password" autocomplete="current-password" value="'+esc(state.kitchenPasswordInput)+'" data-kitchen-password>'+ 
+    '<button class="btn primary block" data-act="unlock">Unlock kitchen</button>'+ 
+    (state.kitchenError?'<p class="error" role="alert">'+esc(state.kitchenError)+'</p>':'')+'</section>';
+}
+
 /* ---------- Chrome ---------- */
 function headerHTML(){
   return '<header class="top"><div><h1>Campus canteen</h1><p class="sub">Prototype v1 with dummy data</p></div>'+
@@ -394,6 +409,7 @@ function headerHTML(){
 }
 function mainHTML(){
   if(state.role==='student') return state.tab==='orders'?myOrdersView():menuView();
+  if(!state.kitchenUnlocked) return kitchenLoginView();
   if(state.tab==='stock') return stockView();
   if(state.tab==='feedback') return feedbackView();
   return kitchenOrdersView();
@@ -402,9 +418,9 @@ function navHTML(){
   var tabs;
   if(state.role==='student'){
     tabs=[['menu','Menu',ICON.menu,0],['orders','My orders',ICON.ticket,state.orders.filter(function(o){return o.mine&&isActive(o);}).length]];
-  }else{
+  }else if(state.kitchenUnlocked){
     tabs=[['orders','Orders',ICON.ticket,state.orders.filter(function(o){return o.status==='received';}).length],['stock','Stock',ICON.box,0],['feedback','Feedback',ICON.chat,0]];
-  }
+  }else return '';
   return '<nav class="nav" aria-label="Sections">'+tabs.map(function(t){
     return '<button data-act="tab" data-v="'+t[0]+'"'+(state.tab===t[0]?' aria-current="page"':'')+'>'+t[2]+t[1]+(t[3]?'<span class="bdg" aria-label="'+t[3]+' pending">'+t[3]+'</span>':'')+'</button>';
   }).join('')+'</nav>';
@@ -510,7 +526,12 @@ function placeOrder(pay){
 function act(a,el){
   var id=el.dataset.id!==undefined?Number(el.dataset.id):null,v=el.dataset.v,o;
   switch(a){
-    case 'role': state.role=v; state.tab=v==='student'?'menu':'orders'; state.sheet=null; break;
+    case 'role': state.role=v; state.tab=v==='student'?'menu':'orders'; state.sheet=null; state.kitchenError=''; break;
+    case 'unlock':
+      if(state.kitchenPasswordInput===KITCHEN_PASSWORD){
+        state.kitchenUnlocked=true; state.kitchenError=''; state.tab='orders';
+      }else state.kitchenError='Incorrect password.';
+      break;
     case 'tab': state.tab=v; break;
     case 'cat': state.cat=v; break;
     case 'add': state.cart[id]=1; state.focus={act:'inc',id:id,v:null}; break;
@@ -574,6 +595,14 @@ document.addEventListener('click',function(e){
 });
 document.addEventListener('input',function(e){
   if(e.target&&e.target.id==='fbtext') state.fbtext=e.target.value;
+  if(e.target&&e.target.id==='kitchen-password') state.kitchenPasswordInput=e.target.value;
+});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Enter'&&e.target&&e.target.id==='kitchen-password'){
+    e.preventDefault();
+    var button=document.querySelector('[data-act="unlock"]');
+    if(button) act('unlock',button);
+  }
 });
 document.addEventListener('keydown',function(e){
   if(e.key==='Escape'&&state.sheet&&!state.paying){state.sheet=null;render();}
